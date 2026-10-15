@@ -1,11 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { BASE, createMockEnv, createMockSandbox } from './helpers';
+import { BASE, createMockEnv as baseCreateMockEnv, createMockSandbox } from './helpers';
 
 const mockSandbox = createMockSandbox();
-vi.mock('../../../../packages/sandbox/src/sandbox', () => ({
-  getSandbox: vi.fn(() => mockSandbox),
-  Sandbox: class {}
-}));
+function createMockEnv(overrides?: Parameters<typeof baseCreateMockEnv>[0]) {
+  return baseCreateMockEnv(overrides, mockSandbox);
+}
+
 
 const { app } = await import('./bridge-app');
 
@@ -37,7 +37,7 @@ describe('PUT /v1/sandbox/:id/file/* — path validation', () => {
     expect(call[0]).toBe('/workspace/main.py');
     // Content is now base64-encoded for binary safety
     expect(call[1]).toBe(btoa('hello'));
-    expect(call[2]).toEqual({ encoding: 'base64' });
+    expect(call[2]).toEqual({ encoding: 'base64', sessionId: '__DISABLE_SESSION__' });
   });
 
   it('rejects path traversal via ..', async () => {
@@ -106,7 +106,7 @@ describe('PUT /sandbox/:id/file/* — binary payloads', () => {
     // Verify round-trip: decode the base64 and compare to original bytes
     const decoded = Uint8Array.from(atob(call[1]), (c) => c.charCodeAt(0));
     expect(decoded).toEqual(bytes);
-    expect(call[2]).toEqual({ encoding: 'base64' });
+    expect(call[2]).toEqual({ encoding: 'base64', sessionId: '__DISABLE_SESSION__' });
   });
 
   it('returns 413 for payloads exceeding 32 MiB', async () => {
@@ -155,7 +155,7 @@ describe('PUT /sandbox/:id/file/* — chunked base64 encoding', () => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const call = mockSandbox.writeFile.mock.calls[0] as any[];
     const b64 = call[1] as string;
-    expect(call[2]).toEqual({ encoding: 'base64' });
+    expect(call[2]).toEqual({ encoding: 'base64', sessionId: '__DISABLE_SESSION__' });
 
     // The base64 string must contain only valid characters (no stray newlines)
     expect(b64).toMatch(/^[A-Za-z0-9+/=]+$/);

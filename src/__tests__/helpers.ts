@@ -116,7 +116,22 @@ export function parseSSE(text: string): Array<{ event: string; data: string }> {
  * The warm-pool middleware is satisfied by a stub that passes the sandbox ID
  * straight through as the container UUID — transparent to existing tests.
  */
-export function createMockEnv(overrides?: Partial<{ SANDBOX_API_KEY: string }>) {
+export function createMockEnv(overrides?: Partial<{ SANDBOX_API_KEY: string }>, sandbox = createMockSandbox()) {
+  // Mock only the Durable Object RPC boundary; execute the published SDK itself.
+  const stub = {
+    ...sandbox,
+    configure: vi.fn(async () => {}),
+    execWithSessionToken: (cmd: string, _token: string, opts?: Record<string, unknown>) => sandbox.exec(cmd, opts),
+    callTunnels: (method: 'get' | 'destroy', args: unknown[]) => (sandbox.tunnels[method] as Function)(...args),
+    fetch: async (request: Request) => {
+      const url = new URL(request.url);
+      const opts = { cols: Number(url.searchParams.get('cols')), rows: Number(url.searchParams.get('rows')), ...(url.searchParams.has('shell') ? { shell: url.searchParams.get('shell') } : {}) };
+      const id = url.searchParams.get('sessionId')!;
+      if (id.startsWith('sandbox-')) return sandbox.terminal(request, opts);
+      const session = await sandbox.getSession(id);
+      return session.terminal(request, opts);
+    }
+  };
   const poolStub = {
     configure: vi.fn(async () => {}),
     getContainer: vi.fn(async (id: string) => id),
@@ -134,7 +149,7 @@ export function createMockEnv(overrides?: Partial<{ SANDBOX_API_KEY: string }>) 
 
   return {
     SANDBOX_API_KEY: overrides?.SANDBOX_API_KEY ?? '',
-    Sandbox: {},
+    Sandbox: { getByName: vi.fn(() => stub), idFromName: vi.fn((name: string) => name), get: vi.fn(() => stub) },
     WarmPool: {
       idFromName: vi.fn(() => ({ name: 'global-pool' })),
       get: vi.fn(() => poolStub)

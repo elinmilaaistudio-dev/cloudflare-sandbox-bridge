@@ -12,18 +12,20 @@
     "cf-typegen": "wrangler types",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "test:integration": "bun script/integration"
+    "test:integration": "node scripts/verify-live.mjs --exercise",
+    "verify:live": "node scripts/verify-live.mjs",
+    "build:check": "wrangler deploy --dry-run --outdir dist"
   },
   "devDependencies": {
     "@biomejs/biome": "2.3.7",
-    "@cloudflare/sandbox": "*",
-    "@cloudflare/vitest-pool-workers": "^0.16.17",
-    "@cloudflare/workers-types": "^4.20251126.0",
-    "@types/node": "^24.10.1",
-    "hono": "^4.13.7",
-    "typescript": "^5.9.3",
-    "vitest": "^4.1.11",
-    "wrangler": "^4.102.0"
+    "@cloudflare/sandbox": "0.12.10",
+    "@cloudflare/vitest-pool-workers": "0.16.17",
+    "@cloudflare/workers-types": "4.20260702.1",
+    "@types/node": "24.10.1",
+    "hono": "4.13.7",
+    "typescript": "5.9.3",
+    "vitest": "4.1.11",
+    "wrangler": "4.102.0"
   },
   "cloudflare": {
     "bindings": {

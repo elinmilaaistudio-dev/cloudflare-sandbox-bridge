@@ -1,14 +1,7 @@
-/**
- * Test adapter — creates the bridge Hono app for use in tests.
- *
- * This replaces the old `const { app } = await import('../index')` pattern
- * now that the route logic lives in @cloudflare/sandbox/bridge.
- */
-import { createBridgeApp } from '../../../../packages/sandbox/src/bridge/routes';
-
-export const app = createBridgeApp({
-  sandboxBinding: 'Sandbox',
-  warmPoolBinding: 'WarmPool',
-  apiPrefix: '/v1',
-  healthPath: '/health'
-});
+import { bridge } from '@cloudflare/sandbox/bridge';
+const worker = bridge({});
+export const app = {
+  request(url: string, init?: RequestInit, env?: Record<string, unknown>) {
+    return worker.fetch!(new Request(url, init), env ?? {}, {} as ExecutionContext);
+  }
+};

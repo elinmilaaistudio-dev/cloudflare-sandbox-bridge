@@ -25,7 +25,7 @@ The worker starts at `http://localhost:8787`.
 
 When running locally, a few routes make it easy to explore the API:
 
-- **`GET /v1/openapi.html`** — self-contained browser UI rendered from the OpenAPI spec. Open this in your browser to explore every endpoint interactively. Auth is skipped when `SANDBOX_API_KEY` is not set in `.dev.vars`.
+- **`GET /v1/openapi.html`** — self-contained browser UI rendered from the OpenAPI spec. Open this in your browser to explore every endpoint interactively. A configured API key and Bearer header are required, including in local development.
 - **`GET /v1/openapi.json`** — machine-readable OpenAPI 3.1 schema. Requires `Authorization: Bearer <token>` when the token is set.
 - **`GET /health`** — unauthenticated liveness probe; returns `{"ok": true}`.
 
@@ -50,13 +50,13 @@ curl https://<your-worker>.workers.dev/health
 
 ### Container instance type
 
-The default configuration uses `"lite"` instances with `max_instances: 3`. This is a good starting point for development and light usage. For production workloads that need more CPU or memory, change `instance_type` to `"standard-1"` (4 vCPU / 8 GiB RAM) and increase `max_instances` in `wrangler.jsonc`.
+The checked-in configuration uses `"standard-1"` instances with `max_instances: 3`. This is a good starting point for development and light usage. `standard-1` provides 4 vCPU / 8 GiB RAM. Review actual usage and billing before increasing `max_instances` in `wrangler.jsonc`.
 
 ## Updating
 
 The bridge worker depends on two versioned artifacts that should be kept in sync:
 
-1. **`@cloudflare/sandbox`** — the SDK package in `package.json`. Bump the version (or use `"*"` to track latest) and run `npm install`.
+1. **`@cloudflare/sandbox`** — the SDK package in `package.json`. The version is pinned to `0.12.10`; change it deliberately together with the image, regenerate `package-lock.json`, and rerun verification.
 2. **`cloudflare/sandbox` Docker image** — the base image tag in `Dockerfile` (e.g. `FROM docker.io/cloudflare/sandbox:0.12.10`). Update the tag to match the SDK version.
 
 Both versions should match — the SDK and container image are released together. After updating:
@@ -75,7 +75,7 @@ All `/v1/sandbox/*` and `/v1/openapi.*` routes require:
 Authorization: Bearer <SANDBOX_API_KEY>
 ```
 
-If `SANDBOX_API_KEY` is not configured on the worker, auth is skipped — convenient for local dev without a `.dev.vars` file. Set the secret before deploying:
+The Worker rejects API requests with 503 when `SANDBOX_API_KEY` is missing or blank. Missing or incorrect Bearer credentials return 401. Query-string tokens are not accepted. `/health` remains public. Set the secret before deploying:
 
 ```sh
 wrangler secret put SANDBOX_API_KEY
@@ -301,7 +301,7 @@ websocat "ws://localhost:8787/v1/sandbox/mfrggzdfmy2tqnrz/pty?cols=120&rows=30" 
 Destroy the sandbox via `sandbox.destroy()`. Returns 204 No Content on success.
 
 ```sh
-curl -X DELETE http://localhost:8787/v1/sandbox/my-sandbox \
+curl -X DELETE http://localhost:8787/v1/sandbox/mfrggzdfmy2tqnrz \
   -H "Authorization: Bearer $SANDBOX_API_KEY"
 ```
 
@@ -498,7 +498,7 @@ The worker applies multiple layers of security to constrain operations within th
 
 ### Authentication
 
-All `/v1/sandbox/*` and `/v1/openapi.*` routes require a Bearer token (`SANDBOX_API_KEY`). When the token is not configured, auth is skipped for local development convenience but a warning is logged. Always set the token before deploying:
+All `/v1/sandbox/*` and `/v1/openapi.*` routes require a Bearer token (`SANDBOX_API_KEY`). The Worker entry point fails closed if the key is absent, including during local development, and skips scheduled pool priming. Always set the token before deploying:
 
 ```sh
 wrangler secret put SANDBOX_API_KEY
@@ -516,7 +516,7 @@ The container image creates a dedicated `sandbox` user. `/workspace` is owned by
 
 ### Input validation
 
-- **Sandbox IDs** must match `[a-z2-7]{1,128}` (base32 lowercase).
+- **Sandbox IDs** must match `[a-z2-7]{1,63}` (base32 lowercase).
 - **Shell arguments** in `/exec` are single-quote-escaped via `shellQuote()` before being passed to the container shell.
 - **Tar payloads** on `/hydrate` are capped at 32 MiB.
 
@@ -526,3 +526,23 @@ The container image creates a dedicated `sandbox` user. `/workspace` is owned by
 - **Symlink escape.** Path validation happens at the HTTP layer by normalising path strings. It cannot resolve symlinks, which exist only inside the container. A caller could use `/exec` to create a symlink from `/workspace/link` to a file outside the workspace, then read that symlink via `/file/*`. The non-root user mitigates the impact (sensitive root-owned files are inaccessible), but world-readable files like `/etc/passwd` could still be read this way.
 - **`USER` directive scope.** The `USER sandbox` directive in the Dockerfile sets the default user for the container entrypoint. Whether `sandbox.exec()` inherits this user depends on the Cloudflare Sandbox runtime behaviour. Verify after deployment that commands run as `sandbox` (e.g. `exec ["whoami"]`).
 - **No network restrictions.** There are no egress network controls within the container. If your threat model requires it, consider restricting outbound access at the container or platform level.
+
+
+## Verification in this standalone repository
+
+Use Node.js 22 or later and the committed dependency lock:
+
+```sh
+npm ci
+npm run typecheck
+npm test
+npm run build:check
+```
+
+Tests import the published SDK through its public exports. Container interactions are mocked at the Durable Object RPC boundary; these tests do not prove a real container starts or runs as the expected user. The original internal tracing-helper test is preserved in `upstream-reference/tracing.test.ts`; it targets private SDK source that is not published as an export, and is not counted among passing tests here. Typechecking alone excludes tests; the separate test command is required.
+
+For an existing deployment, set `SANDBOX_BASE_URL` and `SANDBOX_API_KEY` securely in the environment, then run `npm run verify:live`. This checks health, missing/wrong credentials, the authenticated schema, and an unknown route without creating a sandbox.
+
+`npm run test:integration` additionally creates disposable verification sandboxes, checks the real execution user, command completion, file write/read, path containment, and workspace archive restoration into a second sandbox. It deletes only the IDs created by that invocation in a `finally` block and reports cleanup failures. Never substitute a production workspace ID. A successful local test or build is not a successful deployed integration test.
+
+This bridge is for trusted server-side operators. Keep its API key out of browser code and sandbox workspaces. It is not an unrestricted public terminal or a tenant authorization service. The arbitrary-command, symlink, and outbound-network limitations above still apply. R2 backup, real PTY transport, sleep/restart recovery, capacity handling, and application-specific calling permissions require separate deployed acceptance before enabling those features in production.

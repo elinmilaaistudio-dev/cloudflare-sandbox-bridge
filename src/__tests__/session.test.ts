@@ -1,11 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { createMockEnv, createMockSandbox, createMockSession, parseSSE, sandboxUrl } from './helpers';
+import { createMockEnv as baseCreateMockEnv, createMockSandbox, createMockSession, parseSSE, sandboxUrl } from './helpers';
 
 const mockSandbox = createMockSandbox();
-vi.mock('../../../../packages/sandbox/src/sandbox', () => ({
-  getSandbox: vi.fn(() => mockSandbox),
-  Sandbox: class {}
-}));
+function createMockEnv(overrides?: Parameters<typeof baseCreateMockEnv>[0]) {
+  return baseCreateMockEnv(overrides, mockSandbox);
+}
+
 
 const { app } = await import('./bridge-app');
 

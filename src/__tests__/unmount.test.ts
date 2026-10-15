@@ -1,11 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { BASE, createMockEnv, createMockSandbox } from './helpers';
+import { BASE, createMockEnv as baseCreateMockEnv, createMockSandbox } from './helpers';
 
 const mockSandbox = createMockSandbox();
-vi.mock('../../../../packages/sandbox/src/sandbox', () => ({
-  getSandbox: vi.fn(() => mockSandbox),
-  Sandbox: class {}
-}));
+function createMockEnv(overrides?: Parameters<typeof baseCreateMockEnv>[0]) {
+  return baseCreateMockEnv(overrides, mockSandbox);
+}
+
 
 const { app } = await import('./bridge-app');
 
@@ -36,7 +36,7 @@ describe('POST /v1/sandbox/:id/unmount', () => {
     expect(body.ok).toBe(true);
 
     expect(mockSandbox.unmountBucket).toHaveBeenCalledWith('/mnt/data');
-    expect(mockSandbox.exec).toHaveBeenCalledWith('mountpoint -q /mnt/data || rmdir /mnt/data');
+    expect(mockSandbox.exec).toHaveBeenCalledWith('mountpoint -q /mnt/data || rmdir /mnt/data', undefined);
   });
 
   it('succeeds even if cleanup command fails', async () => {
@@ -84,14 +84,14 @@ describe('POST /v1/sandbox/:id/unmount', () => {
     const res = await unmountRequest({ mountPath: '/workspace' });
     expect(res.status).toBe(200);
     expect(mockSandbox.unmountBucket).toHaveBeenCalledWith('/workspace');
-    expect(mockSandbox.exec).toHaveBeenCalledWith('mountpoint -q /workspace || rmdir /workspace');
+    expect(mockSandbox.exec).toHaveBeenCalledWith('mountpoint -q /workspace || rmdir /workspace', undefined);
   });
 
   it('normalizes the path before passing to SDK and exec', async () => {
     const res = await unmountRequest({ mountPath: '/mnt/data/../buckets/store' });
     expect(res.status).toBe(200);
     expect(mockSandbox.unmountBucket).toHaveBeenCalledWith('/mnt/buckets/store');
-    expect(mockSandbox.exec).toHaveBeenCalledWith('mountpoint -q /mnt/buckets/store || rmdir /mnt/buckets/store');
+    expect(mockSandbox.exec).toHaveBeenCalledWith('mountpoint -q /mnt/buckets/store || rmdir /mnt/buckets/store', undefined);
   });
 
   it('rejects invalid JSON body', async () => {
