@@ -18,6 +18,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     wget \
     ripgrep \
     jq \
+    nodejs \
+    npm \
     procps \
     sed \
     gawk \
