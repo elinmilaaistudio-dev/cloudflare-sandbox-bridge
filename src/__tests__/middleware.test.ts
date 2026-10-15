@@ -1,12 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { BASE, createMockEnv, createMockSandbox, sandboxUrl } from './helpers';
+import { BASE, createMockEnv as baseCreateMockEnv, createMockSandbox, sandboxUrl } from './helpers';
 
 // Mock @cloudflare/sandbox before importing app
 const mockSandbox = createMockSandbox();
-vi.mock('../../../../packages/sandbox/src/sandbox', () => ({
-  getSandbox: vi.fn(() => mockSandbox),
-  Sandbox: class {}
-}));
+function createMockEnv(overrides?: Parameters<typeof baseCreateMockEnv>[0]) {
+  return baseCreateMockEnv(overrides, mockSandbox);
+}
+
 
 // Must import after mock is set up
 const { app } = await import('./bridge-app');
@@ -88,8 +88,8 @@ describe('Sandbox ID validation', () => {
     expect(body.error).toBe('Invalid sandbox ID format');
   });
 
-  it('accepts an ID of exactly 128 characters', async () => {
-    const maxId = 'a'.repeat(128);
+  it('accepts an ID of exactly 63 characters', async () => {
+    const maxId = 'a'.repeat(63);
     const res = await makeRequest(sandboxUrl(maxId, 'running'), {}, createMockEnv());
     expect(res.status).toBe(200);
   });
@@ -119,11 +119,7 @@ describe('Auth middleware — /v1/openapi.*', () => {
       { headers: { Authorization: 'Bearer wrong' } },
       createMockEnv({ SANDBOX_API_KEY: 'secret' }) as Record<string, unknown>
     );
-    // If Hono's pattern matching doesn't apply the middleware, fall back to
-    // testing the route still returns the schema (200). Either the middleware
-    // rejects (401) or it isn't matched and we get 200. Both are acceptable
-    // since the middleware code IS tested via the /sandbox/* path above.
-    expect([200, 401]).toContain(res.status);
+    expect(res.status).toBe(401);
   });
 
   it('returns 200 for /openapi.json when SANDBOX_API_KEY is not set', async () => {

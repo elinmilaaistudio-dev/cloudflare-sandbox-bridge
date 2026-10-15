@@ -1,2 +1,10 @@
 # Vendored openai-agents-python-preview — dev-only reference, never committed
 examples/vendor/
+node_modules/
+.wrangler/
+dist/
+.dev.vars
+.dev.vars.*
+!.dev.vars.example
+.env
+.env.*

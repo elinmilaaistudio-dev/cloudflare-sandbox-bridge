@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { resolveWorkspacePath } from '../../../../packages/sandbox/src/bridge/helpers';
+import { resolveWorkspacePath } from '@cloudflare/sandbox/bridge';
 
 describe('resolveWorkspacePath', () => {
   // --- Valid paths that should resolve successfully ---

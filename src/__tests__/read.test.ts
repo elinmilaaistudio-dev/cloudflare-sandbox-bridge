@@ -1,11 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { BASE, createMockEnv, createMockSandbox, createSSEFileStream } from './helpers';
+import { BASE, createMockEnv as baseCreateMockEnv, createMockSandbox, createSSEFileStream } from './helpers';
 
 const mockSandbox = createMockSandbox();
-vi.mock('../../../../packages/sandbox/src/sandbox', () => ({
-  getSandbox: vi.fn(() => mockSandbox),
-  Sandbox: class {}
-}));
+function createMockEnv(overrides?: Parameters<typeof baseCreateMockEnv>[0]) {
+  return baseCreateMockEnv(overrides, mockSandbox);
+}
+
 
 const { app } = await import('./bridge-app');
 
@@ -30,7 +30,7 @@ describe('GET /v1/sandbox/:id/file/* — path validation', () => {
   it('allows a valid path within /workspace', async () => {
     const res = await readRequest('workspace/main.py');
     expect(res.status).toBe(200);
-    expect(mockSandbox.readFileStream).toHaveBeenCalledWith('/workspace/main.py');
+    expect(mockSandbox.readFileStream).toHaveBeenCalledWith('/workspace/main.py', { sessionId: '__DISABLE_SESSION__' });
     const body = await res.text();
     expect(body).toBe('file content');
   });

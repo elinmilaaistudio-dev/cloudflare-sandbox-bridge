@@ -1,0 +1,1 @@
+The preserved tracing test targets private monorepo SDK internals, unavailable through the published package exports. It is reference material only, excluded from the standalone Vitest suite. No passing-test claim includes this file. All runnable route, helper, and warm-pool tests now use the pinned published SDK.

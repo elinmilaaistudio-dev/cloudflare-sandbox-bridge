@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { shellQuote } from '../../../../packages/sandbox/src/bridge/helpers';
+import { shellQuote } from '@cloudflare/sandbox/bridge';
 
 describe('shellQuote', () => {
   it('returns safe alphanumeric tokens unchanged', () => {
