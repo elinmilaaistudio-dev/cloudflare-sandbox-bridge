@@ -528,6 +528,18 @@ The container image creates a dedicated `sandbox` user. `/workspace` is owned by
 - **No network restrictions.** There are no egress network controls within the container. If your threat model requires it, consider restricting outbound access at the container or platform level.
 
 
+## GREEN LIGHT server-side QA RPC
+
+The `DeveloperEntrypoint` exposes a trusted Service Binding RPC method, `runJavaScriptSource(content, timeoutMs)`, for GREEN LIGHT's internal QC runner. It uploads one QA script into a disposable Sandbox, executes it with Node.js, returns exit code/stdout/stderr, and always destroys the Sandbox in a `finally` block.
+
+For Worker-only RPC changes that do not change `Dockerfile` or effective Container configuration, production Workers Builds should use:
+
+```sh
+npx wrangler deploy --containers-rollout=none
+```
+
+This skips unnecessary image rebuild/push and container rollout while deploying the Worker code.
+
 ## Verification in this standalone repository
 
 Use Node.js 22 or later and the committed dependency lock:
