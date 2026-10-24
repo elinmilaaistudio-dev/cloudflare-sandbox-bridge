@@ -68,6 +68,80 @@ export class DeveloperEntrypoint extends WorkerEntrypoint<BridgeEnv> {
     return authenticatedBridgeFetch(request, this.env, this.ctx);
   }
 
+  async runJavaScriptSource(content: string, timeoutMs = 120000) {
+    if (typeof content !== 'string' || content.length < 1) {
+      throw new Error('QA source is empty');
+    }
+    if (content.length > 4_000_000) {
+      throw new Error('QA source exceeds 4 MB RPC execution limit');
+    }
+    const safeTimeout = Math.max(1000, Math.min(Number(timeoutMs) || 120000, 300000));
+
+    let sandboxId = '';
+    try {
+      const create = await this.request('/v1/sandbox', { method: 'POST' });
+      if (!create.ok) throw new Error('Sandbox create failed: HTTP ' + create.status);
+      const created = await create.json() as { id?: string };
+      sandboxId = String(created.id || '');
+      if (!/^[a-z2-7]{1,63}$/.test(sandboxId)) throw new Error('Sandbox returned invalid ID');
+
+      const base = '/v1/sandbox/' + sandboxId;
+      const put = await this.request(base + '/file/workspace/qa-runner.js', {
+        method: 'PUT',
+        body: content
+      });
+      if (!put.ok) throw new Error('QA source upload failed: HTTP ' + put.status);
+
+      const exec = await this.request(base + '/exec', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          argv: ['node', '/workspace/qa-runner.js'],
+          timeout_ms: safeTimeout,
+          cwd: '/workspace'
+        })
+      });
+      if (!exec.ok) throw new Error('Sandbox QA exec failed: HTTP ' + exec.status);
+
+      const stream = await exec.text();
+      let stdout = '';
+      let stderr = '';
+      let exitCode: number | null = null;
+
+      for (const frame of stream.split(/\r?\n\r?\n/)) {
+        const event = frame.match(/^event: (.+)$/m)?.[1];
+        const data = [...frame.matchAll(/^data: (.*)$/gm)].map(m => m[1]).join('\n');
+        if (!data) continue;
+        if (event === 'stdout') stdout += atob(data);
+        if (event === 'stderr') stderr += atob(data);
+        if (event === 'exit') {
+          try {
+            const parsed = JSON.parse(data) as { exit_code?: number };
+            if (Number.isInteger(parsed.exit_code)) exitCode = Number(parsed.exit_code);
+          } catch {}
+        }
+      }
+
+      return {
+        ok: exitCode === 0,
+        test: 'node qa-runner.js',
+        exit_code: exitCode,
+        stdout: stdout.slice(0, 50000),
+        stderr: stderr.slice(0, 50000),
+        sandbox_created: true,
+        sandbox_deleted: false
+      };
+    } finally {
+      if (sandboxId) {
+        try {
+          await this.request('/v1/sandbox/' + sandboxId, { method: 'DELETE' });
+        } catch (error) {
+          console.error('DeveloperEntrypoint QA sandbox cleanup failed', sandboxId, String(error));
+        }
+      }
+    }
+  }
+
   async testJavaScriptSource(content: string) {
     if (typeof content !== 'string' || content.length < 1) {
       throw new Error('Candidate source is empty');
